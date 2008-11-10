@@ -1,6 +1,6 @@
 package XML::LibXML::LazyBuilder;
 
-use 5.010000;
+use 5.008000;
 use strict;
 use warnings;
 
@@ -25,7 +25,7 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 
 # Preloaded methods go here.
