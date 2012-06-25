@@ -161,8 +161,16 @@ sub E ($;$@) {
 
         # and finally child nodes
         for my $child (@contents) {
-            if (ref $child) {
+            if (_is_really($child, 'CODE')) {
                 $elem->appendChild ($child->($dom));
+            }
+            elsif (_is_really($child, 'XML::LibXML::Node')) {
+                # hey, why not?
+                $elem->appendChild($child);
+            }
+            elsif (my $huh = ref $child) {
+                Carp::croak
+                      ("$huh is neither a CODE ref or an XML::LibXML::Node");
             }
             else {
                 $elem->appendTextNode ($child);
@@ -255,6 +263,9 @@ it will just return C<$elem>.
 
     # we also don't care about the output of this function, since it
     # will have modified $doc, which we already have access to.
+
+Note as well that members of C<@children> can be L<XML::LibXML::Node>
+objects.
 
 =head3 Namespaces
 
