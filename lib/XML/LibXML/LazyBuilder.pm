@@ -116,7 +116,6 @@ sub DOM ($;$$) {
     my ($elem, $ver, $enc) = @_;
 
     my $dom = XML::LibXML::Document->new ($ver || "1.0", $enc || "utf-8");
-    #$dom->setDocumentElement ($elem->($dom));
     $elem->($dom);
 
     $dom;
