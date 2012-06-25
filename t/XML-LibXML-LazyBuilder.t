@@ -53,7 +53,7 @@ use XML::LibXML::LazyBuilder qw/:all/;
 }
 
     {
-        my $d = DOM E 'no-prefix' => { 'xmlns' => 'urn:x-foo:' }, E wat;
+        my $d = DOM E 'no-prefix' => { 'xmlns' => 'urn:x-foo:' }, E 'wat';
         diag($d->toString);
         is($d->documentElement->namespaceURI, 'urn:x-foo:', 'namespace');
     }

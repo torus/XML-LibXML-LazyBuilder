@@ -44,7 +44,7 @@ sub E ($;$@) {
     return sub {
         my ($dom) = @_;
 
-        my ($elem, %ns, %attr);
+        my (%ns, %attr);
 
         # pull the namespace declarations out of the attribute set
         if (ref $attr eq 'HASH') {
