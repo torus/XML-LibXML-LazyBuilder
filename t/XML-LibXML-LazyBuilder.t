@@ -6,7 +6,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 10;
+use Test::More qw(no_plan);
 BEGIN { use_ok('XML::LibXML::LazyBuilder') };
 
 #########################
@@ -51,3 +51,9 @@ use XML::LibXML::LazyBuilder qw/:all/;
     is ($d->firstChild->firstChild->nextSibling->firstChild->nextSibling->tagName,
 	"G", "child nodes");
 }
+
+    {
+        my $d = DOM E 'no-prefix' => { 'xmlns' => 'urn:x-foo:' }, E 'wat';
+        diag($d->toString);
+        is($d->documentElement->namespaceURI, 'urn:x-foo:', 'namespace');
+    }
