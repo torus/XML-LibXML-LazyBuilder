@@ -4,6 +4,9 @@ use 5.008000;
 use strict;
 use warnings;
 
+use Carp ();
+
+# consider using Exporter::Lite - djt
 require Exporter;
 
 our @ISA = qw(Exporter);
@@ -25,43 +28,96 @@ our @EXPORT = qw(
 	
 );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 # Preloaded methods go here.
 
-use XML::LibXML;
+use XML::LibXML ();
 
 sub E ($;$@) {
     my ($name, $attr, @contents) = @_;
 
-    sub {
-	my ($dom) = @_;
+    my ($prefix, $local) = ($name =~ /^(?:([^:]+):)?(.*)$/);
+    $prefix ||= '';
 
-	my $elem = $dom->createElement ($name);
-	if (ref ($attr) eq 'HASH') {
-	    while (my ($n, $v) = each %$attr) {
-		$elem->setAttribute ($n, $v);
-	    }
-	}
+    return sub {
+        my ($dom) = @_;
 
-	for my $child (@contents) {
-	    if (ref $child) {
-		$elem->appendChild ($child->($dom));
-	    } else {
-		$elem->appendTextNode ($child);
-	    }
-	}
+        my ($elem, %ns, %attr);
 
-	$elem;
-    }
+        # pull the namespace declarations out of the attribute set
+        if (ref $attr eq 'HASH') {
+            while (my ($n, $v) = each %$attr) {
+                if ($n =~ /^xmlns(?::(.*))?$/) {
+                    my $p = $1 || '';
+                    $ns{$p} = $v;
+                }
+                else {
+                    $attr{$n} = $v;
+                }
+            }
+        }
+
+        my $elem = $dom->createElement($name);
+
+        # check for a document element so we can find existing namespaces
+        if (my $root = $dom->documentElement) {
+            # XXX this is naive
+            my %n;
+            for my $node ($root->findnodes('//namespace::*')) {
+                $ns{$node->declaredPrefix || ''} = $node->declaredURI;
+            }
+
+            # merge nodes into namespace, overriding existing with
+            # supplied
+            %ns = (%n, %ns);
+        }
+        else {
+            # do this here to make the tree walkable
+            $dom->setDocumentElement($elem);
+        }
+
+        # now do namespaces
+        for my $k (keys %ns) {
+            # activate if the ns matches the prefix
+            $elem->setNamespace($ns{$k}, $k, $k eq $prefix);
+        }
+
+        # NOW do the attributes
+        while (my ($n, $v) = each %attr) {
+            my ($pre, $loc) = ($n =~ /^(?:([^:]+):)?(.*)$/);
+
+            # it'll probably mess up xpath queries if we explicitly
+            # add namespaces to non-prefixed attributes
+            if ($pre and my $nsuri = $ns{$pre}) {
+                $elem->setAttributeNS($nsuri, $n, $v);
+            }
+            else {
+                $elem->setAttribute($n, $v);
+            }
+        }
+
+        # and finally child nodes
+        for my $child (@contents) {
+            if (ref $child) {
+                $elem->appendChild ($child->($dom));
+            }
+            else {
+                $elem->appendTextNode ($child);
+            }
+        }
+
+        $elem;
+    };
 }
 
 sub DOM ($;$$) {
     my ($elem, $ver, $enc) = @_;
 
     my $dom = XML::LibXML::Document->new ($ver || "1.0", $enc || "utf-8");
-    $dom->setDocumentElement ($elem->($dom));
+    #$dom->setDocumentElement ($elem->($dom));
+    $elem->($dom);
 
     $dom;
 }
