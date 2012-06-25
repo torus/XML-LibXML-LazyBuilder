@@ -1,0 +1,77 @@
+NAME
+    XML::LibXML::LazyBuilder - easy and lazy way to create XML document for
+    XML::LibXML
+
+SYNOPSIS
+      use XML::LibXML::LazyBuilder;
+
+      {
+          package XML::LibXML::LazyBuilder;
+          $d = DOM (E A => {at1 => "val1", at2 => "val2"},
+                    ((E B => {}, ((E "C"),
+                                  (E D => {}, "Content of D"))),
+                     (E E => {}, ((E F => {}, "Content of F"),
+                                  (E "G")))));
+      }
+
+DESCRIPTION
+    You can describe XML documents like simple function call instead of
+    using createElement, appendChild, etc...
+
+  FUNCTIONS
+    E
+            E "tagname", \%attr, @children
+
+        Creats CODEREF that generates "XML::LibXML::Element" which tag name
+        is given by first argument. Rest arguments are list of text content
+        or child element created by "E" (so you can nest "E").
+
+        Since the output of this function is CODEREF, the creation of actual
+        "XML::LibXML::Element" object will be delayed until "DOM" function
+        is called.
+
+    DOM
+            DOM \&docroot, $var, $enc
+
+        Generates "XML::LibXML::Document" object actually. First argument is
+        a CODEREF created by "E" function. $var is version number of XML
+        docuemnt, "1.0" by default. $enc is encoding, "utf-8" by default.
+
+  EXPORT
+    None by default.
+
+    :all
+        Exports "E" and "DOM".
+
+  EXAMPLES
+    I recommend to use "package" statement in a small scope so that you can
+    use short function name and avoid to pollute global name space.
+
+      my $d;
+      {
+          package XML::LibXML::LazyBuilder;
+          $d = DOM (E A => {at1 => "val1", at2 => "val2"},
+                    ((E B => {}, ((E "C"),
+                                  (E D => {}, "Content of D"))),
+                     (E E => {}, ((E F => {}, "Content of F"),
+                                  (E "G")))));
+      }
+
+    Then, "$d->toString" will generate XML like this:
+
+      <?xml version="1.0" encoding="utf-8"?>
+      <A at1="val1" at2="val2"><B><C/><D>Content of D</D></B><E><F>Content of F</F><G/></E></A>
+
+SEE ALSO
+    XML::LibXML
+
+AUTHOR
+    Toru Hisai, <toru@torus.jp>
+
+COPYRIGHT AND LICENSE
+    Copyright (C) 2008 by Toru Hisai
+
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself, either Perl version 5.10.0 or, at
+    your option, any later version of Perl 5 you may have available.
+
