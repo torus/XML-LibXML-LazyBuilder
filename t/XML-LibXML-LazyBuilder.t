@@ -52,8 +52,23 @@ use XML::LibXML::LazyBuilder qw/:all/;
 	"G", "child nodes");
 }
 
-    {
-        my $d = DOM E 'no-prefix' => { 'xmlns' => 'urn:x-foo:' }, E 'wat';
-        diag($d->toString);
-        is($d->documentElement->namespaceURI, 'urn:x-foo:', 'namespace');
-    }
+{
+    my $d = DOM E 'no-prefix' => {
+        'xmlns' => 'urn:x-foo:', 'xmlns:bar' => 'urn:x-bar:' }, E 'wat';
+
+    #diag($d->toString);
+    is($d->documentElement->namespaceURI, 'urn:x-foo:', 'namespace');
+
+    my $e = $d->documentElement;
+
+    my $sub = E $e => { one => 'two' },
+        E test => { 'xmlns:test' => 'urn:x-test:' }, E 'test:hello';
+
+    my $e2 = $sub->();
+
+    #diag($d->toString);
+
+    is($e->namespaceURI, 'urn:x-foo:', 'propagated namespace');
+
+    # XXX should really do way more tests here but effit
+}

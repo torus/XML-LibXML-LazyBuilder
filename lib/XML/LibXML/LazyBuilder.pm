@@ -2,9 +2,11 @@ package XML::LibXML::LazyBuilder;
 
 use 5.008000;
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
-use Carp ();
+use Carp         ();
+use Scalar::Util ();
+use XML::LibXML  ();
 
 # consider using Exporter::Lite - djt
 require Exporter;
@@ -25,33 +27,59 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw(
-	
 );
 
 our $VERSION = '0.04';
 
+# This is a map of all the DOM level 3 node names for
+# non-element/attribute nodes. Note how there is no provision for
+# processing instructions.
+my %NODES = (
+    '#cdata-section'     => 1,
+    '#comment'           => 1,
+    '#document'          => 1,
+    '#document-fragment' => 1,
+    '#text'              => 1,
+);
+
+# Note this is and will remain a stub until appropriate behaviour can
+# be worked out.
+
+# (Perhaps a name of ?foo for processing instructions?)
+
+
+
 
 # Preloaded methods go here.
 
-use XML::LibXML ();
+
+# This predicate is an alternative to using UNIVERSAL::isa as a
+# function (which is a no-no); it will return true if a blessed
+# reference is derived from a built-in reference type.
+
+sub _is_really {
+    my ($obj, $type) = @_;
+    return unless defined $obj and ref $obj;
+    return Scalar::Util::blessed($obj) ? $obj->isa($type) : ref $obj eq $type;
+}
 
 sub E ($;$@) {
     my ($name, $attr, @contents) = @_;
 
-    my ($prefix, $local) = ($name =~ /^(?:([^:]+):)?(.*)$/);
-    $prefix ||= '';
 
     return sub {
-        my ($dom) = @_;
+        my $dom = shift;
 
-        my (%ns, %attr);
+        # note, explicit namespace declarations in the attribute set
+        # are held separately from actual namespace mappings found
+        # from scanning the document.
+        my (%ns, %nsdecl, %attr, $elem, $prefix);
 
         # pull the namespace declarations out of the attribute set
-        if (ref $attr eq 'HASH') {
+        if (_is_really($attr, 'HASH')) {
             while (my ($n, $v) = each %$attr) {
                 if ($n =~ /^xmlns(?::(.*))?$/) {
-                    my $p = $1 || '';
-                    $ns{$p} = $v;
+                    $nsdecl{$1 || ''} = $v;
                 }
                 else {
                     $attr{$n} = $v;
@@ -59,35 +87,63 @@ sub E ($;$@) {
             }
         }
 
-        if (ref $name) {
-            $elem = $name;
-            # then we don't need to scan the document for namespaces
+        if (_is_really($name, 'XML::LibXML::Element')) {
+            # throw an exception if the element is not bound to a
+            # document, which itself should become our new $dom
+            Carp::croak("The supplied element must be bound to a document")
+                  unless $dom = $name->ownerDocument;
+
+            # and of course $name is our new $elem
+            $elem   = $name;
+            $name   = $elem->nodeName;
+            $prefix = $elem->prefix || '';
+
+            # then we don't need to scan the document for namespaces,
+            # but we probably should set it for attributes
+            %ns = map { $elem->lookupNamespacePrefix($_) || '' => $_ }
+                $elem->getNamespaces;
         }
-
-        my $elem = $dom->createElement($name);
-
-        # check for a document element so we can find existing namespaces
-        if (my $root = $dom->documentElement) {
-            # XXX this is naive
-            my %n;
-            for my $node ($root->findnodes('//namespace::*')) {
-                $ns{$node->declaredPrefix || ''} = $node->declaredURI;
-            }
-
-            # merge nodes into namespace, overriding existing with
-            # supplied
-            %ns = (%n, %ns);
+        elsif (my $huh = ref $name) {
+            Carp::croak("Expected an XML::LibXML::Element; got $huh instead");
         }
         else {
-            # do this here to make the tree walkable
-            $dom->setDocumentElement($elem);
+            # $name is a string
+            ($prefix) = ($name =~ /^(?:([^:]+):)?(.*)$/);
+            $prefix ||= '';
+
+            # XXX what happens if $name isn't a valid QName?
+
+            $elem = $dom->createElement($name);
+
+            # check for a document element so we can find existing namespaces
+            if (my $root = $dom->documentElement) {
+                # XXX this is naive
+                for my $node ($root->findnodes('//namespace::*')) {
+                    $ns{$node->declaredPrefix || ''} = $node->declaredURI;
+                }
+            }
+            else {
+                # do this here to make the tree walkable
+                $dom->setDocumentElement($elem);
+            }
+
         }
 
-        # now do namespaces
-        for my $k (keys %ns) {
-            # activate if the ns matches the prefix
-            $elem->setNamespace($ns{$k}, $k, $k eq $prefix);
+        # now do namespaces, overriding if necessary
+
+        # first with the implicit mapping
+        if ($ns{$prefix}) {
+            $elem->setNamespace($ns{$prefix}, $prefix, 1);
         }
+
+        # then with the explicit declarations
+        for my $k (keys %nsdecl) {
+            # activate if the ns matches the prefix
+            $elem->setNamespace($nsdecl{$k}, $k, $k eq $prefix);
+        }
+
+        # now smoosh the mappings together for the attributes
+        %ns = (%ns, %nsdecl);
 
         # NOW do the attributes
         while (my ($n, $v) = each %attr) {
@@ -131,7 +187,8 @@ __END__
 
 =head1 NAME
 
-XML::LibXML::LazyBuilder - easy and lazy way to create XML document for XML::LibXML
+XML::LibXML::LazyBuilder - easy and lazy way to create XML documents
+for XML::LibXML
 
 =head1 SYNOPSIS
 
@@ -148,37 +205,97 @@ XML::LibXML::LazyBuilder - easy and lazy way to create XML document for XML::Lib
 
 =head1 DESCRIPTION
 
-You can describe XML documents like simple function call instead of
-using createElement, appendChild, etc...
+This module significantly abridges the overhead of working with
+L<XML::LibXML> by enabling developers to write concise, nested
+structures that evaluate into L<XML::LibXML> objects.
 
-=head2 FUNCTIONS
+=head1 FUNCTIONS
+
+=head2 E
+
+    my $sub = E tagname => \%attr, @children;
+
+    my $doc = DOM $sub;
+
+This function returns a C<CODE> reference which itself evaluates to an
+L<XML::LibXML::Element> object. The function returned from C<E>
+expects an L<XML::LibXML::Document> object as its only argument, which
+is conveniently provided by L</DOM>.
+
+=head3 Using C<E> with an existing XML document
+
+C<E> can also be used to compose the subtree of an existing XML
+element. Instead of supplying a name as the first argument of C<E>,
+supply an L<XML::LibXML::Element> object. Note, however, that any
+attributes present in that object will be overwritten by C<\%attr>,
+and the supplied element I<must> be bound to a document, or the
+function will croak. This is to ensure that the subtree is connected
+to the element's document and not some other document.
+
+As such, any L<XML::LibXML::Document> object passed into the function
+returned by C<E> will be ignored in favour of the document connected
+to the supplied element. This also means that C<E($elem =E<gt> \%attr,
+@children)-E<gt>($ignored_dom);> can be called in void context, because
+it will just return C<$elem>.
+
+    # parse an existing XML document
+    my $doc = XML::LibXML->load_xml(location => 'my.xml');
+
+    # find an element of interest
+    my ($existing) = $doc->findnodes('//some-element[1]');
+
+    # prepare the subtree
+    my $sub = E $existing => \%attr, @children;
+
+    # this will overwrite the attributes of $existing and append
+    # @children to it; normally the document is passed as an argument
+    # but in this case it would be derived from $existing.
+
+    $sub->();
+
+    # we also don't care about the output of this function, since it
+    # will have modified $doc, which we already have access to.
+
+=head3 Namespaces
+
+Qualified element names and namespace declaration attributes will
+behave largely as expected. This means that:
+
+    E 'foo:bar' => { 'xmlns:foo' => 'urn:x-foo:' }; # ...
+
+...will properly induct the generated element into the C<foo>
+namespace. L<E> attempts to infer the namespace mapping from the
+document, so child elements with qualified names will inherit the
+mapping from their ancestors.
 
 =over 4
 
-=item E
-
-    E "tagname", \%attr, @children
-
-Creats CODEREF that generates C<XML::LibXML::Element> which tag name
-is given by first argument.  Rest arguments are list of text content
-or child element created by C<E> (so you can nest C<E>).
-
-Since the output of this function is CODEREF, the creation of actual
-C<XML::LibXML::Element> object will be delayed until C<DOM> function
-is called.
-
-=item DOM
-
-    DOM \&docroot, $var, $enc
-
-Generates C<XML::LibXML::Document> object actually.  First argument is
-a CODEREF created by C<E> function.  C<$var> is version number of XML
-docuemnt, C<"1.0"> by default.  C<$enc> is encoding, C<"utf-8"> by
-default.
+B<CAVEAT:> When C<E> is executed in the context of an I<element name>
+rather than with an existing L<XML::LibXML::Element>, the namespace
+mappings are scanned from the context of the document root, in
+document order. This means that the last namespace declaration that
+appears in the existing document (depth-first) will occupy the given
+prefix. When an existing element is passed into C<E>, the namespace
+search begins there and ascends to the root. If you have any concerns
+about collisions of namespace declarations, use that form instead.
 
 =back
 
-=head2 EXPORT
+=head2 DOM
+
+    my $doc = DOM \&docroot, $var, $enc;
+
+    # With defaults, this is shorthand for:
+
+    my $doc = E($name => \%attr,
+                @children)->(XML::LibXML::Document->new);
+
+Generates a C<XML::LibXML::Document> object. The first argument is a
+C<CODE> reference created by C<E>. C<$var> represents the version in
+the XML declaration, and C<$enc> is the character encoding, which
+default to C<1.0> and C<utf-8>, respectively.
+
+=head1 EXPORT
 
 None by default.
 
@@ -190,10 +307,10 @@ Exports C<E> and C<DOM>.
 
 =back
 
-=head2 EXAMPLES
+=head1 EXAMPLES
 
-I recommend to use C<package> statement in a small scope so that you
-can use short function name and avoid to pollute global name space.
+If you nest your code in braces and use a C<package> declaration like
+so, you can avoid polluting the calling package's namespace:
 
   my $d;
   {
@@ -213,6 +330,8 @@ Then, C<< $d->toString >> will generate XML like this:
 =head1 SEE ALSO
 
 L<XML::LibXML>
+
+The Python module L<lxml.etree|http://lxml.de/tutorial.html>
 
 =head1 AUTHOR
 
