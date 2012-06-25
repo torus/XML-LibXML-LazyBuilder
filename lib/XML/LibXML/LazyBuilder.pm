@@ -59,6 +59,11 @@ sub E ($;$@) {
             }
         }
 
+        if (ref $name) {
+            $elem = $name;
+            # then we don't need to scan the document for namespaces
+        }
+
         my $elem = $dom->createElement($name);
 
         # check for a document element so we can find existing namespaces
