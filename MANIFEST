@@ -1,7 +1,9 @@
 Changes
 Makefile.PL
 MANIFEST
+MANIFEST.SKIP
 README
 t/XML-LibXML-LazyBuilder.t
 lib/XML/LibXML/LazyBuilder.pm
 t/package.t
+META.yml                                 Module meta-data (added by MakeMaker)
