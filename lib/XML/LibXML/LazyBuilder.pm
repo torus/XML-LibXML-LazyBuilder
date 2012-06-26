@@ -346,7 +346,9 @@ The Python module L<lxml.etree|http://lxml.de/tutorial.html>
 
 =head1 AUTHOR
 
-Toru Hisai, E<lt>toru@torus.jpE<gt>
+L<Toru Hisai|mailto:toru@torus.jp>
+
+Namespace support by L<Dorian Taylor|mailto:dorian@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
