@@ -10,4 +10,7 @@ WriteMakefile(
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM  => 'lib/XML/LibXML/LazyBuilder.pm', # retrieve abstract from module
        AUTHOR         => 'Toru Hisai <toru@cpan.org>') : ()),
+
+    PREREQ_FATAL => 1,
+    dist => { PREOP => 'pod2text lib/XML/LibXML/LazyBuilder.pm > README' },
 );

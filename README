@@ -1,5 +1,5 @@
 NAME
-    XML::LibXML::LazyBuilder - easy and lazy way to create XML document for
+    XML::LibXML::LazyBuilder - easy and lazy way to create XML documents for
     XML::LibXML
 
 SYNOPSIS
@@ -15,37 +15,99 @@ SYNOPSIS
       }
 
 DESCRIPTION
-    You can describe XML documents like simple function call instead of
-    using createElement, appendChild, etc...
+    This module significantly abridges the overhead of working with
+    XML::LibXML by enabling developers to write concise, nested structures
+    that evaluate into XML::LibXML objects.
 
-  FUNCTIONS
-    E
-            E "tagname", \%attr, @children
+FUNCTIONS
+  E
+        my $sub = E tagname => \%attr, @children;
 
-        Creats CODEREF that generates "XML::LibXML::Element" which tag name
-        is given by first argument. Rest arguments are list of text content
-        or child element created by "E" (so you can nest "E").
+        my $doc = DOM $sub;
 
-        Since the output of this function is CODEREF, the creation of actual
-        "XML::LibXML::Element" object will be delayed until "DOM" function
-        is called.
+    This function returns a "CODE" reference which itself evaluates to an
+    XML::LibXML::Element object. The function returned from "E" expects an
+    XML::LibXML::Document object as its only argument, which is conveniently
+    provided by "DOM".
 
-    DOM
-            DOM \&docroot, $var, $enc
+   Using "E" with an existing XML document
+    "E" can also be used to compose the subtree of an existing XML element.
+    Instead of supplying a name as the first argument of "E", supply an
+    XML::LibXML::Element object. Note, however, that any attributes present
+    in that object will be overwritten by "\%attr", and the supplied element
+    *must* be bound to a document, or the function will croak. This is to
+    ensure that the subtree is connected to the element's document and not
+    some other document.
 
-        Generates "XML::LibXML::Document" object actually. First argument is
-        a CODEREF created by "E" function. $var is version number of XML
-        docuemnt, "1.0" by default. $enc is encoding, "utf-8" by default.
+    As such, any XML::LibXML::Document object passed into the function
+    returned by "E" will be ignored in favour of the document connected to
+    the supplied element. This also means that "E($elem => \%attr,
+    @children)->($ignored_dom);" can be called in void context, because it
+    will just return $elem.
 
-  EXPORT
+        # parse an existing XML document
+        my $doc = XML::LibXML->load_xml(location => 'my.xml');
+
+        # find an element of interest
+        my ($existing) = $doc->findnodes('//some-element[1]');
+
+        # prepare the subtree
+        my $sub = E $existing => \%attr, @children;
+
+        # this will overwrite the attributes of $existing and append
+        # @children to it; normally the document is passed as an argument
+        # but in this case it would be derived from $existing.
+
+        $sub->();
+
+        # we also don't care about the output of this function, since it
+        # will have modified $doc, which we already have access to.
+
+    Note as well that members of @children can be XML::LibXML::Node objects.
+
+   Namespaces
+    Qualified element names and namespace declaration attributes will behave
+    largely as expected. This means that:
+
+        E 'foo:bar' => { 'xmlns:foo' => 'urn:x-foo:' }; # ...
+
+    ...will properly induct the generated element into the "foo" namespace.
+    E attempts to infer the namespace mapping from the document, so child
+    elements with qualified names will inherit the mapping from their
+    ancestors.
+
+        CAVEAT: When "E" is executed in the context of an *element name*
+        rather than with an existing XML::LibXML::Element, the namespace
+        mappings are scanned from the context of the document root, in
+        document order. This means that the last namespace declaration that
+        appears in the existing document (depth-first) will occupy the given
+        prefix. When an existing element is passed into "E", the namespace
+        search begins there and ascends to the root. If you have any
+        concerns about collisions of namespace declarations, use that form
+        instead.
+
+  DOM
+        my $doc = DOM \&docroot, $var, $enc;
+
+        # With defaults, this is shorthand for:
+
+        my $doc = E($name => \%attr,
+                    @children)->(XML::LibXML::Document->new);
+
+    Generates a "XML::LibXML::Document" object. The first argument is a
+    "CODE" reference created by "E". $var represents the version in the XML
+    declaration, and $enc is the character encoding, which default to 1.0
+    and "utf-8", respectively.
+
+EXPORT
     None by default.
 
     :all
         Exports "E" and "DOM".
 
-  EXAMPLES
-    I recommend to use "package" statement in a small scope so that you can
-    use short function name and avoid to pollute global name space.
+EXAMPLES
+    If you nest your code in braces and use a "package" declaration like so,
+    you can avoid polluting the calling package's namespace:
 
       my $d;
       {
@@ -65,8 +127,12 @@ DESCRIPTION
 SEE ALSO
     XML::LibXML
 
+    The Python module lxml.etree <http://lxml.de/tutorial.html>
+
 AUTHOR
-    Toru Hisai, <toru@torus.jp>
+    Toru Hisai <mailto:toru@torus.jp>
+
+    Namespace support by Dorian Taylor <mailto:dorian@cpan.org>
 
 COPYRIGHT AND LICENSE
     Copyright (C) 2008 by Toru Hisai
