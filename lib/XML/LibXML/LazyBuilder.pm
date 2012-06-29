@@ -514,11 +514,11 @@ The Python module L<lxml.etree|http://lxml.de/tutorial.html>
 
 L<Toru Hisai|mailto:toru@torus.jp>
 
-Namespace support by L<Dorian Taylor|mailto:dorian@cpan.org>
+Namespace and non-element support by L<Dorian Taylor|mailto:dorian@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2008 by Toru Hisai
+Copyright (C) 2008, 2012 by Toru Hisai
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.0 or,

@@ -20,6 +20,19 @@ DESCRIPTION
     that evaluate into XML::LibXML objects.
 
 FUNCTIONS
+  DOM
+        my $doc = DOM (E $name => \%attr, @children), $var, $enc;
+
+        # With defaults, this is shorthand for:
+
+        my $doc = E($name => \%attr,
+                    @children)->(XML::LibXML::Document->new);
+
+    Generates a "XML::LibXML::Document" object. The first argument is a
+    "CODE" reference created by "E". $var represents the version in the XML
+    declaration, and $enc is the character encoding, which default to 1.0
+    and "utf-8", respectively.
+
   E
         my $sub = E tagname => \%attr, @children;
 
@@ -86,24 +99,59 @@ FUNCTIONS
         concerns about collisions of namespace declarations, use that form
         instead.
 
-  DOM
-        my $doc = DOM \&docroot, $var, $enc;
+  P
+        my $sub = P target => { key => 'value' }, @othertext;
 
-        # With defaults, this is shorthand for:
+    This function returns a "CODE" reference which returns a processing
+    instruction. If you pass in a HASH reference as the first argument, it
+    will be turned into key-value pairs using double-quotes on the values.
+    This means you have to take care of your own escaping of any double
+    quotes that may be in the values. The rest of the arguments are
+    concatenated into a string (intended to behave like "print" in perlfunc,
+    which means if you want spaces between them, you likewise need to add
+    them yourself).
 
-        my $doc = E($name => \%attr,
-                    @children)->(XML::LibXML::Document->new);
+  C
+        my $sub = C @text;
 
-    Generates a "XML::LibXML::Document" object. The first argument is a
-    "CODE" reference created by "E". $var represents the version in the XML
-    declaration, and $enc is the character encoding, which default to 1.0
-    and "utf-8", respectively.
+    This function creates a "CODE" reference which returns a comment. Again,
+    @text is simply concatenated, so if you wish to do any additional
+    formatting, do so before passing it in.
+
+  D
+        my $sub = D @text;
+
+    This function creates a "CODE" reference which returns a CDATA section.
+    Works identically to "C".
+
+  F
+        my $sub = F @children;
+
+    This function creates a "CODE" reference which returns a document
+    fragment. Since "DOM" can only accept a single node-generating function,
+    it is particularly useful for the following idiom:
+
+        my $doc = DOM F(
+            (P 'xml-stylesheet' => { type => 'text/xsl', href => '/foo.xsl' }),
+            (E mydoc => {}, @children));
+
+    Which produces:
+
+        <?xml version="1.0" encoding="utf-8"?>
+        <?xml-stylesheet type="text/xsl" href="/foo.xsl"?>
+        <mydoc>...</mydoc>
+
+  DTD
+        my $sub = DTD $name => $public, $system;
+
+    This function creates a "CODE" reference which returns a DTD
+    declaration. Both $public and $system can be "undef".
 
 EXPORT
     None by default.
 
-    :all
-        Exports "E" and "DOM".
+  :all
+    Exports "E", "P", "C", "D", "F" and "DOM".
 
 EXAMPLES
     If you nest your code in braces and use a "package" declaration like so,
@@ -132,10 +180,11 @@ SEE ALSO
 AUTHOR
     Toru Hisai <mailto:toru@torus.jp>
 
-    Namespace support by Dorian Taylor <mailto:dorian@cpan.org>
+    Namespace and non-element support by Dorian Taylor
+    <mailto:dorian@cpan.org>
 
 COPYRIGHT AND LICENSE
-    Copyright (C) 2008 by Toru Hisai
+    Copyright (C) 2008, 2012 by Toru Hisai
 
     This library is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself, either Perl version 5.10.0 or, at
