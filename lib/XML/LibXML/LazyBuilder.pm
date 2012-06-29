@@ -21,7 +21,7 @@ our @ISA = qw(Exporter);
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
 our %EXPORT_TAGS = ( 'all' => [ qw(
-	E DOM
+	DOM E P C D F DTD
 ) ] );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
@@ -29,7 +29,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 );
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 # This is a map of all the DOM level 3 node names for
 # non-element/attribute nodes. Note how there is no provision for
@@ -47,6 +47,7 @@ my %NODES = (
 
 # (Perhaps a name of ?foo for processing instructions?)
 
+# nah, special methods for non-element nodes!
 
 
 
@@ -63,9 +64,49 @@ sub _is_really {
     return Scalar::Util::blessed($obj) ? $obj->isa($type) : ref $obj eq $type;
 }
 
+sub DOM ($;$$) {
+    my ($sub, $ver, $enc) = @_;
+
+    my $dom = XML::LibXML::Document->new ($ver || "1.0", $enc || "utf-8");
+
+    # this whole $dom $sub thing is cracking me up ;) -- djt
+    my $node = $sub->($dom);
+
+    if (_is_really($node, 'XML::LibXML::DocumentFragment')) {
+        # "Appending a document fragment node to a document node not
+        # supported yet!", says XML::LibXML, so we work around it.
+
+        for my $child ($node->childNodes) {
+            #warn $child->ownerDocument;
+            $child->unbindNode;
+            if ($child->nodeType == 1) {
+                if (my $root = $dom->documentElement) {
+                    unless ($root->isSameNode($child)) {
+                        Carp::croak("Trying to insert a second root element");
+                    }
+                }
+                else {
+                    $dom->setDocumentElement($child);
+                }
+            }
+            else {
+                $dom->appendChild($child);
+            }
+        }
+    }
+    elsif (_is_really($node, 'XML::LibXML::Element')) {
+        # NO-OP: Elements get attached to the root from inside the E
+        # function so it can access the namespace map.
+    }
+    else {
+        $dom->appendChild($node);
+    }
+
+    $dom;
+}
+
 sub E ($;$@) {
     my ($name, $attr, @contents) = @_;
-
 
     return sub {
         my $dom = shift;
@@ -181,13 +222,89 @@ sub E ($;$@) {
     };
 }
 
-sub DOM ($;$$) {
-    my ($elem, $ver, $enc) = @_;
+# processing instruction
+sub P ($;$@) {
+    my ($target, $attr, @text) = @_;
 
-    my $dom = XML::LibXML::Document->new ($ver || "1.0", $enc || "utf-8");
-    $elem->($dom);
+    return sub {
+        my $dom = shift;
 
-    $dom;
+        # copy, otherwise this will just keep packing it on if executed
+        # more than once
+        my @t = @text;
+
+        # turn into k="v" convention
+        if (defined $attr) {
+            if (_is_really($attr, 'HASH')) {
+                my $x = join ' ',
+                    map { sprintf '%s="%s"', $_, $attr->{$_} } keys %$attr;
+                unshift @t, $x;
+            }
+            else {
+                unshift @t, $attr;
+            }
+        }
+
+        return $dom->createProcessingInstruction($target, join '', @t);
+    };
+}
+
+# comment
+sub C (;@) {
+    my @text = @_;
+
+    return sub {
+        my $dom = shift;
+        $dom->createComment(join '', @text);
+    };
+}
+
+# CDATA
+sub D (;@) {
+    my @text = @_;
+
+    return sub {
+        my $dom = shift;
+        $dom->createCDATASection(join '', @text);
+    };
+}
+
+# document fragment
+sub F (@) {
+    my @children = @_;
+
+    return sub {
+        my $dom = shift;
+        my $frag = $dom->createDocumentFragment;
+        for my $child (@children) {
+            # same as E
+            if (_is_really($child, 'CODE')) {
+                $frag->appendChild($child->($dom));
+            }
+            elsif (_is_really($child, 'XML::LibXML::Node')) {
+                $frag->appendChild($child);
+            }
+            elsif (my $huh = ref $child) {
+                Carp::croak
+                      ("$huh is neither a CODE ref or an XML::LibXML::Node");
+            }
+            else {
+                $frag->appendChild($dom->createTextNode($child));
+            }
+        }
+        $frag;
+    };
+}
+
+sub DTD ($;$$) {
+    my ($name, $public, $system) = @_;
+
+    return sub {
+        my $dom = shift;
+
+        # must be an XS hiccup; can't just pass these in if they're undef
+        $dom->createExternalSubset($name, $public || undef, $system || undef);
+    };
 }
 
 1;
@@ -218,6 +335,20 @@ L<XML::LibXML> by enabling developers to write concise, nested
 structures that evaluate into L<XML::LibXML> objects.
 
 =head1 FUNCTIONS
+
+=head2 DOM
+
+    my $doc = DOM (E $name => \%attr, @children), $var, $enc;
+
+    # With defaults, this is shorthand for:
+
+    my $doc = E($name => \%attr,
+                @children)->(XML::LibXML::Document->new);
+
+Generates a C<XML::LibXML::Document> object. The first argument is a
+C<CODE> reference created by C<E>. C<$var> represents the version in
+the XML declaration, and C<$enc> is the character encoding, which
+default to C<1.0> and C<utf-8>, respectively.
 
 =head2 E
 
@@ -292,31 +423,66 @@ about collisions of namespace declarations, use that form instead.
 
 =back
 
-=head2 DOM
+=head2 P
 
-    my $doc = DOM \&docroot, $var, $enc;
+    my $sub = P target => { key => 'value' }, @othertext;
 
-    # With defaults, this is shorthand for:
+This function returns a C<CODE> reference which returns a processing
+instruction. If you pass in a HASH reference as the first argument, it
+will be turned into key-value pairs using double-quotes on the
+values. This means you have to take care of your own escaping of any
+double quotes that may be in the values. The rest of the arguments are
+concatenated into a string (intended to behave like L<perlfunc/print>,
+which means if you want spaces between them, you likewise need to add
+them yourself).
 
-    my $doc = E($name => \%attr,
-                @children)->(XML::LibXML::Document->new);
+=head2 C
 
-Generates a C<XML::LibXML::Document> object. The first argument is a
-C<CODE> reference created by C<E>. C<$var> represents the version in
-the XML declaration, and C<$enc> is the character encoding, which
-default to C<1.0> and C<utf-8>, respectively.
+    my $sub = C @text;
+
+This function creates a C<CODE> reference which returns a comment.
+Again, C<@text> is simply concatenated, so if you wish to do any
+additional formatting, do so before passing it in.
+
+=head2 D
+
+    my $sub = D @text;
+
+This function creates a C<CODE> reference which returns a CDATA
+section. Works identically to L</C>.
+
+=head2 F
+
+    my $sub = F @children;
+
+This function creates a C<CODE> reference which returns a document
+fragment. Since L</DOM> can only accept a single node-generating
+function, it is particularly useful for the following idiom:
+
+    my $doc = DOM F(
+        (P 'xml-stylesheet' => { type => 'text/xsl', href => '/foo.xsl' }),
+        (E mydoc => {}, @children));
+
+Which produces:
+
+    <?xml version="1.0" encoding="utf-8"?>
+    <?xml-stylesheet type="text/xsl" href="/foo.xsl"?>
+    <mydoc>...</mydoc>
+
+=head2 DTD
+
+    my $sub = DTD $name => $public, $system;
+
+This function creates a C<CODE> reference which returns a DTD
+declaration. Both C<$public> and C<$system> can be C<undef>.
 
 =head1 EXPORT
 
 None by default.
 
-=over 4
+=head2 :all
 
-=item :all
-
-Exports C<E> and C<DOM>.
-
-=back
+Exports L</E>, L</P>, L</C>, L</D>, L</F> and L</DOM>.
 
 =head1 EXAMPLES
 

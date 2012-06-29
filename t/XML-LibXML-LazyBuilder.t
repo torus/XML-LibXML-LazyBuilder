@@ -72,3 +72,17 @@ use XML::LibXML::LazyBuilder qw/:all/;
 
     # XXX should really do way more tests here but effit
 }
+
+{
+    # fragment, processing instruction, DTD, comment, cdata
+    my $d = DOM F(
+        (P 'xml-stylesheet' => { type => 'text/xsl', href => '/foo.xsl' }),
+        (DTD 'foo'),
+        (E foo => { xmlns => 'urn:x-wat:' }, E bar => {}, (C 'yo'), (D 'hi')));
+
+    #diag($d->toString(1));
+
+    # only really concerned that the namespaces came out ok
+    my $nsuri = $d->documentElement->firstChild->namespaceURI;
+    is($nsuri, 'urn:x-wat:', 'namespace survived fragment');
+}
