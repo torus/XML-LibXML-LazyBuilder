@@ -29,7 +29,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 # This is a map of all the DOM level 3 node names for
 # non-element/attribute nodes. Note how there is no provision for
@@ -109,7 +109,7 @@ sub E ($;$@) {
     my ($name, $attr, @contents) = @_;
 
     return sub {
-        my $dom = shift;
+        my ($dom, $parent) = @_;
 
         # note, explicit namespace declarations in the attribute set
         # are held separately from actual namespace mappings found
@@ -157,9 +157,9 @@ sub E ($;$@) {
             $elem = $dom->createElement($name);
 
             # check for a document element so we can find existing namespaces
-            if (my $root = $dom->documentElement) {
+            if ($parent ||= $dom->documentElement) {
                 # XXX this is naive
-                for my $node ($root->findnodes('//namespace::*')) {
+                for my $node ($parent->findnodes('namespace::*')) {
                     $ns{$node->declaredPrefix || ''} = $node->declaredURI;
                 }
             }
@@ -203,7 +203,7 @@ sub E ($;$@) {
         # and finally child nodes
         for my $child (@contents) {
             if (_is_really($child, 'CODE')) {
-                $elem->appendChild ($child->($dom));
+                $elem->appendChild ($child->($dom, $elem));
             }
             elsif (_is_really($child, 'XML::LibXML::Node')) {
                 # hey, why not?
