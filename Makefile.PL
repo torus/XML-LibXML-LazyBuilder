@@ -11,6 +11,6 @@ WriteMakefile(
       (ABSTRACT_FROM  => 'lib/XML/LibXML/LazyBuilder.pm', # retrieve abstract from module
        AUTHOR         => 'Toru Hisai <toru@cpan.org>') : ()),
 
-    PREREQ_FATAL => 1,
+    PREREQ_FATAL => 0,
     dist => { PREOP => 'pod2text lib/XML/LibXML/LazyBuilder.pm > README' },
 );

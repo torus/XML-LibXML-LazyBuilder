@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                XML-LibXML-LazyBuilder
-version:             0.07
+version:             0.08
 abstract:            easy and lazy way to create XML document for XML::LibXML
 license:             perl
 author:              
