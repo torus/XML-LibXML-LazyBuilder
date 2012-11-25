@@ -34,14 +34,14 @@ sub DOM {}
 
 {
     package XML::LibXML::LazyBuilder;
-    my $d = DOM (E A => {at1 => "val1", at2 => "val2"},
+    my $d = DOM (E A => {at2 => "val1", at1 => "val2"},
 		 ((E B => {}, ((E "C"),
 			       (E D => {}, "Content of D"))),
 		  (E E => {}, ((E F => {}, "Content of F"),
 			       (E "G")))));
 
     package main;
-    is ($d->toString, (qq[<?xml version="1.0" encoding="utf-8"?>\n]
-		       . qq[<A at1="val1" at2="val2"><B><C/><D>Content of D</D></B>]
-		       . qq[<E><F>Content of F</F><G/></E></A>\n]), "example");
+    is ($d->toStringC14N,
+        (qq[<A at1="val2" at2="val1"><B><C></C><D>Content of D</D></B>]
+         . qq[<E><F>Content of F</F><G></G></E></A>]), "example");
 }
